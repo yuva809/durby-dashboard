@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root.dark {
+    --background: 222 22% 7%;
+    --foreground: 210 20% 96%;
+    --card: 222 20% 10%;
+    --card-foreground: 210 20% 96%;
+    --muted: 222 16% 16%;
+    --muted-foreground: 217 12% 65%;
+    --border: 222 16% 18%;
+    --accent: 252 95% 68%;
+    --accent-foreground: 0 0% 100%;
+    --success: 152 60% 50%;
+    --warning: 38 92% 58%;
+    --danger: 0 84% 63%;
+    --radius: 0.875rem;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer utilities {
+  .card-surface {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+}

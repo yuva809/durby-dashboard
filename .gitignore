@@ -1,0 +1,32 @@
+# Secrets — never commit real credentials. Copy .env.example -> .env.local
+# and fill in real values locally / in your deployment platform's secret store.
+.env*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS/editor cruft
+.DS_Store
+.vscode/
+.idea/
+
+# Claude Code local project settings
+.claude/
+
+# Test coverage
+coverage/
+
+# TypeScript incremental build cache — local-machine-specific, not source
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+.vercel
