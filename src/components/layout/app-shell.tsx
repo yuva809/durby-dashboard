@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Mail } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { NoRestaurantScreen } from "./no-restaurant-screen";
 import { useRestaurantContext } from "@/providers/restaurant-provider";
 
 // Single integration point for the onboarding gate: every page renders
@@ -17,21 +17,7 @@ import { useRestaurantContext } from "@/providers/restaurant-provider";
 // Self-service restaurant creation no longer exists — every restaurant
 // comes from an admin-issued invitation (src/app/invite/[token]/page.tsx).
 // A user with zero memberships has nothing to create here; they're waiting
-// on an invitation email.
-function NoRestaurantYet() {
-  return (
-    <div className="flex h-full w-full items-center justify-center px-6">
-      <div className="card-surface flex max-w-md flex-col items-center gap-3 p-8 text-center">
-        <Mail className="h-8 w-8 text-muted-foreground" />
-        <h2 className="text-base font-semibold">No restaurant yet</h2>
-        <p className="text-sm text-muted-foreground">
-          Your account isn&apos;t linked to a restaurant. Check your email for an invitation
-          from your administrator, or contact them if you were expecting one.
-        </p>
-      </div>
-    </div>
-  );
-}
+// on an invitation email. See NoRestaurantScreen for the actual empty state.
 
 export function AppShell({
   title,
@@ -53,7 +39,7 @@ export function AppShell({
               Loading…
             </div>
           ) : onboardingRequired ? (
-            <NoRestaurantYet />
+            <NoRestaurantScreen />
           ) : (
             children
           )}
