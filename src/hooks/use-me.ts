@@ -10,10 +10,20 @@ export interface Membership {
   role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE";
 }
 
+export interface ClerkConflict {
+  id: string;
+  email: string;
+  detectedAt: string;
+}
+
 export interface MeResponse {
   user: { id: string; email: string; name: string };
   memberships: Membership[];
   onboardingRequired: boolean;
+  // Dev/staging diagnostic only — see ClerkIdentityConflict in
+  // backend/prisma/schema.prisma. Always null in production. Non-null only
+  // for an affected SUPER_ADMIN, purely informational.
+  clerkConflict: ClerkConflict | null;
 }
 
 export const ME_QUERY_KEY = ["me"];

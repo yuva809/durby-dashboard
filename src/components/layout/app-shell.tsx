@@ -26,7 +26,7 @@ export function AppShell({
   title: string;
   children: ReactNode;
 }) {
-  const { isLoading, onboardingRequired } = useRestaurantContext();
+  const { isLoading, onboardingRequired, clerkConflict } = useRestaurantContext();
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -39,7 +39,7 @@ export function AppShell({
               Loading…
             </div>
           ) : onboardingRequired ? (
-            <NoRestaurantScreen />
+            <NoRestaurantScreen clerkConflict={clerkConflict} />
           ) : (
             children
           )}

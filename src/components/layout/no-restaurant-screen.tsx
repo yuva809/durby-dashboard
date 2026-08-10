@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Building2, MailSearch, LifeBuoy } from "lucide-react";
+import { Mail, Building2, MailSearch, LifeBuoy, ShieldAlert } from "lucide-react";
+import type { ClerkConflict } from "@/hooks/use-me";
 
 const SUPPORT_EMAIL = "yuvanesh.raju5@gmail.com";
 const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
@@ -20,12 +21,28 @@ const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
 // owner who hasn't been invited at all" — both look identical from here
 // (signed in, zero memberships). Rather than guess, both paths are shown
 // side by side and the person self-selects.
-export function NoRestaurantScreen() {
+export function NoRestaurantScreen({ clerkConflict }: { clerkConflict?: ClerkConflict | null }) {
   const [showInviteTip, setShowInviteTip] = useState(false);
 
   return (
     <div className="flex h-full w-full items-center justify-center px-6 py-10">
       <div className="flex w-full max-w-2xl flex-col items-center gap-8">
+        {clerkConflict && (
+          <div className="flex w-full items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-left">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+            <div className="text-sm">
+              <p className="font-medium">This email already has an account elsewhere</p>
+              <p className="mt-1 leading-relaxed text-muted-foreground">
+                <strong>{clerkConflict.email}</strong> already exists under a different sign-in
+                environment (for example, a development vs. production setup) — that&apos;s a
+                separate identity from the one you just signed in with, so it doesn&apos;t carry
+                over your restaurant access automatically. Nothing was lost. A platform
+                administrator can see this in the admin console and send you a fresh invitation to
+                reconnect.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent/15">
             <Building2 className="h-7 w-7 text-accent" />
