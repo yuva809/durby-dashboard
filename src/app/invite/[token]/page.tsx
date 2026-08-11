@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAuth, useUser, useClerk, SignIn, SignUp } from "@clerk/nextjs";
+import { useAuth, useUser, useClerk, useSignUp, SignIn } from "@clerk/nextjs";
+import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useInvitation, useAcceptInvitation } from "@/hooks/use-invitation";
 import { ApiError } from "@/lib/api-client";
@@ -13,6 +14,14 @@ import { ApiError } from "@/lib/api-client";
 // open this. Flow: validate the token → if not signed in, show sign-in/
 // sign-up (redirects back to this same URL) → once signed in, accept the
 // invitation → redirect to /dashboard.
+//
+// Sign-up specifically uses a custom flow (useSignUp + signUp.create({
+// strategy: "ticket", ... })) instead of the prebuilt <SignUp> component.
+// Clerk's current docs are explicit that the prebuilt component does NOT
+// consume a ticket automatically — see clerk.com/docs/guides/development/
+// custom-flows/authentication/application-invitations. This is also what
+// makes Restricted Sign-Up mode work later: the ticket is what lets a
+// brand-new account through once that mode is enabled.
 export default function InvitePage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
@@ -23,28 +32,6 @@ export default function InvitePage() {
   const { data: invitation, isLoading, isError, error } = useInvitation(token);
   const accept = useAcceptInvitation(token);
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-up");
-
-  // Clerk's Restricted Sign-Up mode blocks any brand-new account unless the
-  // sign-up carries a valid ticket. The prebuilt <SignUp> component reads
-  // it straight off window.location.search at mount time — no custom
-  // useSignUp() flow needed — but that means the ticket MUST already be in
-  // the URL before <SignUp> ever mounts. `ticketApplied` gates its render
-  // so we don't race: the effect runs (and commits the URL change) on the
-  // render where invitation.clerkTicket first arrives, `setTicketApplied`
-  // triggers one more render, and only THEN does <SignUp> appear below.
-  const [ticketApplied, setTicketApplied] = useState(false);
-  useEffect(() => {
-    if (!invitation?.clerkTicket) return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("__clerk_ticket") !== invitation.clerkTicket) {
-      url.searchParams.set("__clerk_ticket", invitation.clerkTicket);
-      window.history.replaceState(null, "", url.toString());
-    }
-    setTicketApplied(true);
-  }, [invitation?.clerkTicket]);
-  // No ticket at all (e.g. an older invitation created before this
-  // migration) shouldn't block sign-in forever — only sign-up needs it.
-  const readyForSignUp = !invitation?.clerkTicket || ticketApplied;
 
   const currentUrl = typeof window !== "undefined" ? window.location.href : `/invite/${token}`;
 
@@ -63,7 +50,9 @@ export default function InvitePage() {
 
   // Once signed in as the correct account and the invitation is genuinely
   // still pending, accept it automatically — no separate "confirm" click
-  // needed, the invitation link itself is the confirmation.
+  // needed, the invitation link itself is the confirmation. This fires the
+  // same way whether the session was just created by the custom sign-up
+  // flow below or by <SignIn/> for a returning user.
   useEffect(() => {
     if (isLoaded && isSignedIn && !emailMismatch && invitation?.status === "PENDING" && accept.isIdle) {
       accept.mutate(undefined, {
@@ -178,17 +167,6 @@ export default function InvitePage() {
     );
   }
 
-  // mode === "sign-up" specifically needs the ticket already committed to
-  // the URL (see the effect above) before <SignUp> mounts and reads it —
-  // this is a one-render gap, not a real wait.
-  if (mode === "sign-up" && !readyForSignUp) {
-    return (
-      <Centered>
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </Centered>
-    );
-  }
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
       <div className="flex max-w-md flex-col items-center gap-2 text-center">
@@ -218,14 +196,163 @@ export default function InvitePage() {
       </div>
 
       {mode === "sign-up" ? (
-        <SignUp
-          initialValues={{ emailAddress: invitation.email }}
-          forceRedirectUrl={currentUrl}
-        />
+        <TicketSignUpForm email={invitation.email} ticket={invitation.clerkTicket} />
       ) : (
         <SignIn forceRedirectUrl={currentUrl} />
       )}
     </div>
+  );
+}
+
+// Custom sign-up flow — the invitation's ticket is passed straight to
+// signUp.create() from our own API response (invitation.clerkTicket), not
+// round-tripped through a __clerk_ticket URL param. Email comes from the
+// ticket itself (Clerk resolves and auto-verifies it server-side); there
+// is deliberately no email input here, so the invited address can't be
+// changed client-side even before the backend's own accept()-time check.
+function TicketSignUpForm({ email, ticket }: { email: string; ticket: string | null }) {
+  const { isLoaded, signUp, setActive } = useSignUp();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+
+  if (!ticket) {
+    // Invitation predates the Clerk-ticket migration, or something upstream
+    // failed to attach one — there's nothing this form can safely do.
+    return (
+      <div className="card-surface max-w-md p-6 text-center text-sm text-muted-foreground">
+        This invitation link is missing required setup information. Please ask your administrator to resend it.
+      </div>
+    );
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!isLoaded || !signUp || submitting) return;
+    setSubmitting(true);
+    setFieldErrors({});
+    setFormError(null);
+
+    try {
+      const attempt = await signUp.create({
+        strategy: "ticket",
+        ticket: ticket as string,
+        firstName,
+        lastName,
+        password,
+      });
+
+      if (attempt.status === "complete") {
+        await setActive({ session: attempt.createdSessionId });
+        // isSignedIn flips true, and the effect in InvitePage takes over
+        // (calls our own accept() to create the RestaurantMember).
+        return;
+      }
+
+      // Clerk still wants something else before this sign-up is usable —
+      // report exactly what, rather than a generic failure.
+      const missing = attempt.missingFields?.length
+        ? `Still needed: ${attempt.missingFields.join(", ")}.`
+        : "Please check the fields above and try again.";
+      setFormError(missing);
+    } catch (err) {
+      if (isClerkAPIResponseError(err)) {
+        const nextFieldErrors: Record<string, string> = {};
+        let generalMessage: string | null = null;
+        for (const clerkError of err.errors) {
+          if (clerkError.meta?.paramName) {
+            nextFieldErrors[clerkError.meta.paramName] = clerkError.longMessage ?? clerkError.message;
+          } else {
+            generalMessage = clerkError.longMessage ?? clerkError.message;
+          }
+        }
+        setFieldErrors(nextFieldErrors);
+        setFormError(generalMessage);
+      } else {
+        setFormError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="card-surface flex w-full max-w-md flex-col gap-4 p-6">
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Email address</label>
+        {/* Locked — the invited email comes from the ticket itself, not
+            user input. Displaying it as disabled text (not a real input)
+            makes it structurally impossible to edit from this form. */}
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          {email}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="firstName" className="mb-1 block text-xs font-medium text-muted-foreground">
+            First name
+          </label>
+          <input
+            id="firstName"
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+          {fieldErrors.first_name && <p className="mt-1 text-xs text-danger">{fieldErrors.first_name}</p>}
+        </div>
+        <div>
+          <label htmlFor="lastName" className="mb-1 block text-xs font-medium text-muted-foreground">
+            Last name
+          </label>
+          <input
+            id="lastName"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+          {fieldErrors.last_name && <p className="mt-1 text-xs text-danger">{fieldErrors.last_name}</p>}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="password" className="mb-1 block text-xs font-medium text-muted-foreground">
+          Password
+        </label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={8}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        />
+        {fieldErrors.password && <p className="mt-1 text-xs text-danger">{fieldErrors.password}</p>}
+      </div>
+
+      {formError && <p className="text-xs text-danger">{formError}</p>}
+
+      {/* Clerk's bot-signup protection (Cloudflare Turnstile) mounts here —
+          required for signUp.create() to succeed; see captcha_enabled in
+          this instance's environment config. */}
+      <div id="clerk-captcha" />
+
+      <button
+        type="submit"
+        disabled={!isLoaded || submitting}
+        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+      >
+        {submitting ? "Creating account…" : "Create account"}
+      </button>
+    </form>
   );
 }
 
