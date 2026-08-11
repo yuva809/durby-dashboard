@@ -9,6 +9,10 @@ export interface InvitationDetails {
   restaurantName: string;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELLED";
   expiresAt: string;
+  // Only present while status is PENDING — see backend
+  // InvitationsService#validateToken. Required for Clerk's Restricted
+  // Sign-Up mode to allow a brand-new account through this link.
+  clerkTicket: string | null;
 }
 
 // Public endpoint — no auth required, matches backend's @Public() on

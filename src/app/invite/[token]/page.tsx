@@ -24,6 +24,28 @@ export default function InvitePage() {
   const accept = useAcceptInvitation(token);
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-up");
 
+  // Clerk's Restricted Sign-Up mode blocks any brand-new account unless the
+  // sign-up carries a valid ticket. The prebuilt <SignUp> component reads
+  // it straight off window.location.search at mount time — no custom
+  // useSignUp() flow needed — but that means the ticket MUST already be in
+  // the URL before <SignUp> ever mounts. `ticketApplied` gates its render
+  // so we don't race: the effect runs (and commits the URL change) on the
+  // render where invitation.clerkTicket first arrives, `setTicketApplied`
+  // triggers one more render, and only THEN does <SignUp> appear below.
+  const [ticketApplied, setTicketApplied] = useState(false);
+  useEffect(() => {
+    if (!invitation?.clerkTicket) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("__clerk_ticket") !== invitation.clerkTicket) {
+      url.searchParams.set("__clerk_ticket", invitation.clerkTicket);
+      window.history.replaceState(null, "", url.toString());
+    }
+    setTicketApplied(true);
+  }, [invitation?.clerkTicket]);
+  // No ticket at all (e.g. an older invitation created before this
+  // migration) shouldn't block sign-in forever — only sign-up needs it.
+  const readyForSignUp = !invitation?.clerkTicket || ticketApplied;
+
   const currentUrl = typeof window !== "undefined" ? window.location.href : `/invite/${token}`;
 
   const signedInEmail = user?.primaryEmailAddress?.emailAddress ?? null;
@@ -152,6 +174,17 @@ export default function InvitePage() {
       <Centered>
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         <p className="mt-3 text-sm text-muted-foreground">Setting up your account…</p>
+      </Centered>
+    );
+  }
+
+  // mode === "sign-up" specifically needs the ticket already committed to
+  // the URL (see the effect above) before <SignUp> mounts and reads it —
+  // this is a one-render gap, not a real wait.
+  if (mode === "sign-up" && !readyForSignUp) {
+    return (
+      <Centered>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </Centered>
     );
   }
