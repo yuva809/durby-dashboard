@@ -158,7 +158,14 @@ export default function InvitePage() {
     );
   }
 
-  if (!isLoaded || (isSignedIn && accept.isPending)) {
+  // isIdle (not just isPending) closes a one-render gap: right after a
+  // successful sign-up/sign-in, isSignedIn flips true before the effect
+  // above has actually started accept.mutate(). By this point every
+  // earlier branch has already ruled out emailMismatch and any non-PENDING
+  // invitation status, so isSignedIn && accept.isIdle here can only mean
+  // "about to auto-accept" — safe to show the loading state immediately
+  // instead of letting TicketSignUpForm flash back into view.
+  if (!isLoaded || (isSignedIn && (accept.isPending || accept.isIdle))) {
     return (
       <Centered>
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -247,6 +254,13 @@ function TicketSignUpForm({ email, ticket }: { email: string; ticket: string | n
 
       if (attempt.status === "complete") {
         await setActive({ session: attempt.createdSessionId });
+        // Clerk's SDK writes __clerk_ticket into the URL as part of its own
+        // ticket-strategy bookkeeping. It's single-use and already consumed
+        // at this point — leaving it in the URL risks it being reprocessed
+        // (and correctly rejected as invalid) on any subsequent refresh.
+        const url = new URL(window.location.href);
+        url.searchParams.delete("__clerk_ticket");
+        window.history.replaceState(null, "", url.toString());
         // isSignedIn flips true, and the effect in InvitePage takes over
         // (calls our own accept() to create the RestaurantMember).
         return;
