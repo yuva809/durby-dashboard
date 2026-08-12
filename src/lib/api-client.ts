@@ -21,7 +21,29 @@ async function getAuthToken(): Promise<string | null> {
   }
 }
 
+// Every restaurant-scoped hook (query and mutation alike) builds its URL by
+// interpolating useRestaurantId()'s return value, which is `null` until
+// RestaurantProvider finishes resolving /me. Query hooks consistently guard
+// with `enabled: !!restaurantId`, but mutation hooks don't have an
+// equivalent React Query option — if a mutation ever fires before
+// restaurantId resolves, `${restaurantId}` silently stringifies to the
+// literal text "null"/"undefined" in the URL. Centralizing the guard here
+// (rather than adding a null-check to every one of the ~50 mutation hooks)
+// catches every current and future case in one place: TenancyGuard would
+// reject "/restaurants/null/..." anyway (no membership row matches that
+// string), so this doesn't change what's reachable — it just fails fast,
+// client-side, with a clear message instead of a wasted round-trip.
+function assertNoUnresolvedRestaurantId(path: string): void {
+  if (/\/restaurants\/(null|undefined)(\/|$)/.test(path)) {
+    throw new Error(
+      "Blocked API request: restaurantId has not resolved yet. This is a client bug — the caller " +
+        "must wait for the restaurant context to finish loading before triggering this request.",
+    );
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  assertNoUnresolvedRestaurantId(path);
   const token = await getAuthToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
