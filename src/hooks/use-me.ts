@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api-client";
 export interface Membership {
   restaurantId: string;
   restaurantName: string;
+  restaurantStatus: "PENDING_ONBOARDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED" | "ARCHIVED";
   role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE";
 }
 

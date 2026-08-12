@@ -50,7 +50,18 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         clerkConflict: null,
       };
     }
-    const active = data.memberships[0] ?? null;
+    // Prefer the first ACTIVE membership over just memberships[0] — a user
+    // can accumulate a membership to a since-cancelled/archived/suspended
+    // restaurant (e.g. re-invited to a replacement restaurant after the
+    // original was cancelled) without that old membership ever being
+    // removed. memberships[] is ordered oldest-first (see me.controller.ts),
+    // so blindly taking [0] would silently pin them to the dead restaurant.
+    // Falls back to memberships[0] if none are ACTIVE, so a user whose only
+    // restaurant(s) are non-active still gets a restaurantId — TenancyGuard
+    // is the actual source of truth and will correctly reject with the
+    // existing "account is suspended" error rather than this provider
+    // silently switching them anywhere.
+    const active = data.memberships.find((m) => m.restaurantStatus === "ACTIVE") ?? data.memberships[0] ?? null;
     return {
       restaurantId: active?.restaurantId ?? null,
       role: active?.role ?? null,
