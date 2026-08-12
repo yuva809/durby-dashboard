@@ -67,6 +67,10 @@ export interface EnqueueResult {
    *  of via the background queue — processing still happens, just without
    *  BullMQ's retry semantics. */
   queued: boolean;
+  /** Only set when queued is false — a short, user-safe explanation to
+   *  show alongside the upload, since "queued" would otherwise be the only
+   *  signal and it's misleading in this case. */
+  message?: string;
 }
 
 // Any of these means "work is still happening, poll fast" — covers the

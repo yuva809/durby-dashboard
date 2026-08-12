@@ -227,6 +227,12 @@ interface ActiveUpload {
    *  validation 400 never creates an ImportLog, so it can only be
    *  represented here. */
   uploadError: string | null;
+  /** Set when the upload succeeded but EnqueueResult.queued was false —
+   *  the background queue was unavailable, so this ran (or is running)
+   *  inline instead. Not an error: the import still completes and
+   *  lastImport.stage still tracks its real progress, this is purely an
+   *  informational heads-up. */
+  notice: string | null;
 }
 
 interface CardState {
@@ -292,6 +298,10 @@ function DatasetCard({
           onDismiss={onDismissProgress}
           onRetry={() => onUpload(type, cardState.activeUpload!.file, cardState.activeUpload!.mode)}
         />
+      )}
+
+      {showProgress && cardState.activeUpload?.notice && (
+        <p className="rounded bg-yellow-500/10 px-2 py-1.5 text-[11px] text-yellow-500">{cardState.activeUpload.notice}</p>
       )}
 
       {sizeWarning && (
@@ -552,6 +562,10 @@ function ComplianceImportCard({
             />
           )}
 
+          {showProgress && activeUpload?.notice && (
+            <p className="rounded bg-yellow-500/10 px-2 py-1.5 text-[11px] text-yellow-500">{activeUpload.notice}</p>
+          )}
+
           {sizeWarning && !pendingFile && (
             <p className="rounded bg-yellow-500/10 px-2 py-1.5 text-[11px] text-yellow-500">{sizeWarning}</p>
           )}
@@ -641,10 +655,10 @@ export default function DataCenterPage() {
   async function handleMainUpload(type: DatasetType, file: File, mode: "replace" | "append") {
     setCardStates((prev) => ({
       ...prev,
-      [type]: { ...prev[type], activeUpload: { file, mode, uploadPct: 0, dismissed: false, uploadError: null } },
+      [type]: { ...prev[type], activeUpload: { file, mode, uploadPct: 0, dismissed: false, uploadError: null, notice: null } },
     }));
     try {
-      await importMutation.mutateAsync({
+      const result = await importMutation.mutateAsync({
         file,
         datasetType: type,
         mode,
@@ -658,7 +672,18 @@ export default function DataCenterPage() {
       });
       // From here on, polling (useDataCenterStatus) drives progress —
       // status?.lastImport updates as the backend moves through
-      // queued -> parsing -> writing -> agents_running -> completed.
+      // queued -> parsing -> writing -> agents_running -> completed. The
+      // background queue being unavailable (result.queued === false)
+      // doesn't affect that — the import still runs, just inline — this is
+      // purely an informational heads-up, not an error state.
+      if (!result.queued) {
+        setCardStates((prev) => ({
+          ...prev,
+          [type]: prev[type].activeUpload
+            ? { ...prev[type], activeUpload: { ...prev[type].activeUpload!, notice: result.message ?? "Processing without the background queue right now — this may take longer than usual." } }
+            : prev[type],
+        }));
+      }
     } catch (err) {
       // Upload-transfer-level failure (network error, 400 validation) —
       // no ImportLog was ever created for this attempt, so the error has
@@ -669,7 +694,7 @@ export default function DataCenterPage() {
           ...prev[type],
           activeUpload: {
             file, mode, uploadPct: prev[type].activeUpload?.uploadPct ?? null, dismissed: false,
-            uploadError: err instanceof Error ? err.message : "Upload failed",
+            uploadError: err instanceof Error ? err.message : "Upload failed", notice: null,
           },
         },
       }));
@@ -681,10 +706,10 @@ export default function DataCenterPage() {
   async function handleComplianceUpload(type: DatasetType, file: File) {
     setComplianceUploads((prev) => ({
       ...prev,
-      [type]: { file, mode: "append", uploadPct: 0, dismissed: false, uploadError: null },
+      [type]: { file, mode: "append", uploadPct: 0, dismissed: false, uploadError: null, notice: null },
     }));
     try {
-      await importMutation.mutateAsync({
+      const result = await importMutation.mutateAsync({
         file,
         datasetType: type,
         mode: "append",
@@ -693,12 +718,19 @@ export default function DataCenterPage() {
             prev[type] ? { ...prev, [type]: { ...prev[type]!, uploadPct: pct } } : prev,
           ),
       });
+      if (!result.queued) {
+        setComplianceUploads((prev) =>
+          prev[type]
+            ? { ...prev, [type]: { ...prev[type]!, notice: result.message ?? "Processing without the background queue right now — this may take longer than usual." } }
+            : prev,
+        );
+      }
     } catch (err) {
       setComplianceUploads((prev) => ({
         ...prev,
         [type]: {
           file, mode: "append", uploadPct: prev[type]?.uploadPct ?? null, dismissed: false,
-          uploadError: err instanceof Error ? err.message : "Upload failed",
+          uploadError: err instanceof Error ? err.message : "Upload failed", notice: null,
         },
       }));
     }
