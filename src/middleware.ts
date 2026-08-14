@@ -10,10 +10,11 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/login",
   "/sign-in(.*)",
-  "/sign-up(.*)",
-  // Invitation landing page — a brand-new user has no session yet when
-  // they open this link. The page itself gates sign-in/sign-up before
-  // calling the accept endpoint (which IS authenticated).
+  // Deliberately no "/sign-up" route — Durby is invitation-only.
+  // Self-service account creation was removed (see the deleted
+  // src/app/sign-up route); the only way to create an account is
+  // /invite/:token's ticket-gated flow below, which is a completely
+  // separate code path (useSignUp() + strategy:"ticket"), not this route.
   "/invite(.*)",
 ]);
 

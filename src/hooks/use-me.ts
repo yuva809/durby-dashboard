@@ -33,8 +33,8 @@ export interface MeResponse {
 export const ME_QUERY_KEY = ["me"];
 
 // Only fires once Clerk has finished loading and the user is actually
-// signed in — on /sign-in, /sign-up, or before Clerk hydrates, there's no
-// token to send and no point hitting the backend.
+// signed in — on /sign-in, /invite/:token, or before Clerk hydrates,
+// there's no token to send and no point hitting the backend.
 //
 // Self-service restaurant creation no longer exists — a signed-in user
 // with zero memberships stays onboardingRequired until they accept an
