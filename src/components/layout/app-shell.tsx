@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { NoRestaurantScreen } from "./no-restaurant-screen";
@@ -26,7 +27,19 @@ export function AppShell({
   title: string;
   children: ReactNode;
 }) {
-  const { isLoading, onboardingRequired, clerkConflict } = useRestaurantContext();
+  const { isLoading, onboardingRequired, onboardingCompleted, clerkConflict } = useRestaurantContext();
+  const router = useRouter();
+
+  // A restaurant that exists (membership found) but hasn't finished the
+  // onboarding wizard yet gets sent to /onboarding instead of whatever
+  // dashboard page they landed on — this is the single redirect point for
+  // that, same "one gate for every page" reasoning as onboardingRequired
+  // below. The wizard's own page redirects back here once complete, so
+  // this never loops.
+  const needsOnboarding = !isLoading && !onboardingRequired && !onboardingCompleted;
+  useEffect(() => {
+    if (needsOnboarding) router.replace("/onboarding");
+  }, [needsOnboarding, router]);
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -34,7 +47,7 @@ export function AppShell({
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar title={title} />
         <main className="flex-1 overflow-y-auto px-6 py-6">
-          {isLoading ? (
+          {isLoading || needsOnboarding ? (
             <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
               Loading…
             </div>

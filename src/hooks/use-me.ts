@@ -8,6 +8,9 @@ export interface Membership {
   restaurantId: string;
   restaurantName: string;
   restaurantStatus: "PENDING_ONBOARDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED" | "ARCHIVED";
+  /** Has this restaurant's OWNER completed the onboarding wizard? Distinct
+   *  from MeResponse.onboardingRequired (zero memberships at all). */
+  onboardingCompleted: boolean;
   role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE";
 }
 

@@ -12,6 +12,10 @@ interface RestaurantContextValue {
   isLoading: boolean;
   /** True once /me has resolved and the user has zero restaurant memberships. */
   onboardingRequired: boolean;
+  /** True once the active restaurant's onboarding wizard has been
+   *  completed. Meaningless while onboardingRequired/isLoading is true —
+   *  defaults to true so those states never look like "needs onboarding". */
+  onboardingCompleted: boolean;
   /** Dev/staging diagnostic only — see MeResponse. Always null in production. */
   clerkConflict: ClerkConflict | null;
 }
@@ -22,6 +26,7 @@ const RestaurantContext = createContext<RestaurantContextValue>({
   memberships: [],
   isLoading: true,
   onboardingRequired: false,
+  onboardingCompleted: true,
   clerkConflict: null,
 });
 
@@ -37,6 +42,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         memberships: [],
         isLoading: true,
         onboardingRequired: false,
+        onboardingCompleted: true,
         clerkConflict: null,
       };
     }
@@ -47,6 +53,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         memberships: [],
         isLoading: false,
         onboardingRequired: false,
+        onboardingCompleted: true,
         clerkConflict: null,
       };
     }
@@ -68,6 +75,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
       memberships: data.memberships,
       isLoading: false,
       onboardingRequired: data.onboardingRequired,
+      onboardingCompleted: active?.onboardingCompleted ?? true,
       clerkConflict: data.clerkConflict,
     };
   }, [isLoaded, isSignedIn, meLoading, data]);
