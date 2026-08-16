@@ -27,12 +27,14 @@ import { AvailabilityTab } from "@/components/scheduling/availability-tab";
 import { WorkflowPipeline, buildWorkflowStages } from "@/components/scheduling/workflow-pipeline";
 import { DemandExplanationPanel } from "@/components/scheduling/demand-explanation-panel";
 import { EmployeeProfilePanel } from "@/components/scheduling/employee-profile-panel";
+import { LeaveRequestsTab } from "@/components/scheduling/leave-requests-tab";
 
-type SchedulingTab = "overview" | "availability" | "schedule";
+type SchedulingTab = "overview" | "availability" | "leave" | "schedule";
 
 const TABS: { key: SchedulingTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "availability", label: "Availability" },
+  { key: "leave", label: "Leave" },
   { key: "schedule", label: "Schedule" },
 ];
 
@@ -736,7 +738,9 @@ export default function SchedulingPage() {
 
       {activeTab === "availability" && <AvailabilityTab />}
 
-      {activeTab !== "availability" && (
+      {activeTab === "leave" && <LeaveRequestsTab />}
+
+      {activeTab !== "availability" && activeTab !== "leave" && (
       <>
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">

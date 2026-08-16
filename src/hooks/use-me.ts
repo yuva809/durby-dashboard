@@ -11,7 +11,7 @@ export interface Membership {
   /** Has this restaurant's OWNER completed the onboarding wizard? Distinct
    *  from MeResponse.onboardingRequired (zero memberships at all). */
   onboardingCompleted: boolean;
-  role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE";
+  role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE" | "SERVICE" | "KITCHEN" | "INVENTORY";
 }
 
 export interface ClerkConflict {

@@ -9,6 +9,8 @@ import {
   type DemandLevel, type StatusLevel,
 } from "@/hooks/use-operational-dashboard";
 import { useRestaurantId } from "@/hooks/use-restaurant-id";
+import { useRestaurantContext } from "@/providers/restaurant-provider";
+import { MyDayView } from "@/components/dashboard/my-day-view";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -129,8 +131,15 @@ function HourlyTooltip({ active, payload, label }: {
 
 export default function DashboardPage() {
   const restaurantId = useRestaurantId();
+  const { role } = useRestaurantContext();
+  // SERVICE/KITCHEN staff get "My Day" instead of the full operator
+  // dashboard — same route, role-branched, so their nav's "My Day" link
+  // and everyone else's "Dashboard" link both just point at /dashboard.
+  const isServiceRole = role === "SERVICE" || role === "KITCHEN";
   const { data, isLoading, error } = useOperationalDashboard();
   const { data: signalsRaw } = useDemandSignals(restaurantId);
+
+  if (isServiceRole) return <MyDayView />;
 
   // Merge live signal factors into drivers if available
   const liveFactors = signalsRaw?.revenue?.days?.[0]?.factors ?? [];

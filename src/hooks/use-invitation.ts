@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api-client";
 
 export interface InvitationDetails {
   email: string;
-  role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE";
+  role: "OWNER" | "MANAGER" | "STAFF" | "FINANCE" | "SERVICE" | "KITCHEN" | "INVENTORY";
   restaurantName: string;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELLED";
   expiresAt: string;

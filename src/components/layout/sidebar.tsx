@@ -17,13 +17,18 @@ import {
   Plug,
   BookOpen,
   Star,
+  Sun,
+  ClipboardList,
+  UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EXTRAHAND_URL } from "@/lib/config";
+import { useRestaurantContext } from "@/providers/restaurant-provider";
 
-const NAV_ITEMS = [
+const FULL_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/chat", label: "AI Chat", icon: MessageSquare },
+  { href: "/dashboard/order", label: "Durby Order", icon: ClipboardList },
   { href: "/dashboard/forecast", label: "Forecast", icon: TrendingUp },
   { href: "/dashboard/data-center", label: "Data Center", icon: Database },
   { href: "/dashboard/menu", label: "Menu", icon: BookOpen },
@@ -38,8 +43,19 @@ const NAV_ITEMS = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
+// Service/kitchen staff get a deliberately tiny nav — this should feel
+// like a simple employee app, not the full operator dashboard. Profile
+// lives behind the avatar (Topbar), not here, for every role.
+const SERVICE_NAV_ITEMS = [
+  { href: "/dashboard", label: "My Day", icon: Sun },
+  { href: "/dashboard/order", label: "Durby Order", icon: ClipboardList },
+  { href: "/dashboard/my-work", label: "My Work", icon: UserCircle },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { role } = useRestaurantContext();
+  const navItems = role === "SERVICE" || role === "KITCHEN" ? SERVICE_NAV_ITEMS : FULL_NAV_ITEMS;
 
   return (
     <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-border bg-card/40 px-4 py-6">
@@ -50,11 +66,10 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon }) => {
           // "/dashboard" is a prefix of every nested route, so it needs an
-          // exact match — otherwise the Dashboard tab would stay lit up
-          // alongside whichever sub-page (e.g. /dashboard/analytics) is
-          // actually active.
+          // exact match — otherwise the Dashboard/My Day tab would stay
+          // lit up alongside whichever sub-page is actually active.
           const active = href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href);
           return (
             <Link
