@@ -6,6 +6,7 @@ import { ConfigMissingBanner, ErrorBanner, LoadingBanner } from "@/components/sh
 import { OverviewTile } from "@/components/shared/overview-tile";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useRestaurantId } from "@/hooks/use-restaurant-id";
+import { useRestaurantContext } from "@/providers/restaurant-provider";
 import { formatCurrency, cn } from "@/lib/utils";
 import { tryConvertUnit } from "@/lib/units";
 import {
@@ -107,7 +108,10 @@ function AddItemForm({ categories, onClose }: { categories: { id: string; name: 
     }
     createItem.mutate(
       { name: name.trim(), price: p, categoryId: categoryId || null, portionSize: portionSize.trim() || undefined },
-      { onSuccess: onClose },
+      {
+        onSuccess: onClose,
+        onError: (err) => setFormError(err instanceof Error ? err.message : "Failed to add item — please try again."),
+      },
     );
   };
 
@@ -135,7 +139,7 @@ function AddItemForm({ categories, onClose }: { categories: { id: string; name: 
 
 // ── Draft (needs review) item row ─────────────────────────────────────────────
 
-function DraftItemRow({ item, categories }: { item: MenuItemDto; categories: { id: string; name: string }[] }) {
+function DraftItemRow({ item, categories, canManage }: { item: MenuItemDto; categories: { id: string; name: string }[]; canManage: boolean }) {
   const updateItem = useUpdateMenuItem();
   const deleteItem = useDeleteMenuItem();
   const [name, setName] = useState(item.name);
@@ -169,23 +173,27 @@ function DraftItemRow({ item, categories }: { item: MenuItemDto; categories: { i
         ) : <span className="text-xs text-muted-foreground">manual</span>}
       </td>
       <td className="py-2 pr-3">
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={() =>
-              updateItem.mutate({
-                itemId: item.id,
-                dto: { name, price: Number(price), categoryId: categoryId || null, status: "CONFIRMED" },
-              })
-            }
-            disabled={updateItem.isPending}
-            className="flex items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground disabled:opacity-50"
-          >
-            <CheckCircle2 className="h-3 w-3" /> Confirm
-          </button>
-          <button onClick={() => setConfirmDelete(true)} className="rounded border border-border p-1.5 text-muted-foreground hover:bg-muted/40">
-            <Trash2 className="h-3 w-3" />
-          </button>
-        </div>
+        {canManage ? (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() =>
+                updateItem.mutate({
+                  itemId: item.id,
+                  dto: { name, price: Number(price), categoryId: categoryId || null, status: "CONFIRMED" },
+                })
+              }
+              disabled={updateItem.isPending}
+              className="flex items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-3 w-3" /> Confirm
+            </button>
+            <button onClick={() => setConfirmDelete(true)} className="rounded border border-border p-1.5 text-muted-foreground hover:bg-muted/40">
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <span className="block text-right text-xs text-muted-foreground">View only</span>
+        )}
       </td>
       <ConfirmDialog
         open={confirmDelete}
@@ -210,9 +218,9 @@ interface RecipeRow {
 }
 
 function RecipeEditor({
-  menuItem, onClose, onDirtyChange,
+  menuItem, onClose, onDirtyChange, canManage,
 }: {
-  menuItem: MenuItemDto; onClose: () => void; onDirtyChange: (dirty: boolean) => void;
+  menuItem: MenuItemDto; onClose: () => void; onDirtyChange: (dirty: boolean) => void; canManage: boolean;
 }) {
   const { data: recipe, isLoading } = useRecipe(menuItem.id);
   const { data: products } = useProducts();
@@ -318,8 +326,9 @@ function RecipeEditor({
             <div key={row.key} className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
                 <select
-                  className="flex-1 rounded-lg border border-border bg-transparent px-2.5 py-2 text-sm"
+                  className="flex-1 rounded-lg border border-border bg-transparent px-2.5 py-2 text-sm disabled:opacity-70"
                   value={row.productId}
+                  disabled={!canManage}
                   onChange={(e) => updateRow(row.key, { productId: e.target.value })}
                 >
                   <option value="">— select ingredient —</option>
@@ -327,26 +336,30 @@ function RecipeEditor({
                 </select>
                 <input
                   type="number"
-                  className="w-24 rounded-lg border border-border bg-transparent px-2.5 py-2 text-right text-sm"
+                  className="w-24 rounded-lg border border-border bg-transparent px-2.5 py-2 text-right text-sm disabled:opacity-70"
                   placeholder="Qty"
                   value={row.quantity}
+                  disabled={!canManage}
                   onChange={(e) => updateRow(row.key, { quantity: e.target.value })}
                 />
                 <input
                   className={cn(
-                    "w-20 rounded-lg border bg-transparent px-2.5 py-2 text-sm",
+                    "w-20 rounded-lg border bg-transparent px-2.5 py-2 text-sm disabled:opacity-70",
                     unitIncompatible ? "border-red-400" : "border-border",
                   )}
                   placeholder="unit"
                   value={row.unit}
+                  disabled={!canManage}
                   onChange={(e) => updateRow(row.key, { unit: e.target.value })}
                 />
                 <span className="w-20 text-right text-xs text-muted-foreground">
                   {lineCost !== null ? formatCurrency(lineCost) : "—"}
                 </span>
-                <button onClick={() => removeRow(row.key)} className="flex w-7 items-center justify-center rounded-lg p-1.5 text-muted-foreground hover:bg-muted/40">
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                {canManage && (
+                  <button onClick={() => removeRow(row.key)} className="flex w-7 items-center justify-center rounded-lg p-1.5 text-muted-foreground hover:bg-muted/40">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
               {unitIncompatible && (
                 <p className="pl-0.5 text-[11px] text-red-500">
@@ -358,9 +371,11 @@ function RecipeEditor({
         })}
       </div>
 
-      <button onClick={addRow} className="flex w-fit items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/5">
-        <Plus className="h-3 w-3" /> Add Ingredient
-      </button>
+      {canManage && (
+        <button onClick={addRow} className="flex w-fit items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/5">
+          <Plus className="h-3 w-3" /> Add Ingredient
+        </button>
+      )}
 
       <div className="flex items-center justify-between border-t border-border pt-4">
         <div className="text-xs text-muted-foreground">
@@ -377,13 +392,15 @@ function RecipeEditor({
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/40">Close</button>
-          <button
-            onClick={save}
-            disabled={setRecipe.isPending}
-            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-foreground disabled:opacity-50"
-          >
-            {setRecipe.isPending ? "Saving…" : "Save Recipe"}
-          </button>
+          {canManage && (
+            <button
+              onClick={save}
+              disabled={setRecipe.isPending}
+              className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-foreground disabled:opacity-50"
+            >
+              {setRecipe.isPending ? "Saving…" : "Save Recipe"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -394,6 +411,8 @@ function RecipeEditor({
 
 export default function MenuPage() {
   const restaurantId = useRestaurantId();
+  const { role } = useRestaurantContext();
+  const canManage = role === "OWNER" || role === "MANAGER";
   const { data: overview, isLoading: overviewLoading, isError: overviewError } = useMenuOverview();
   const { data: categories, isError: categoriesError } = useMenuCategories();
   const { data: draftItems } = useMenuItems("DRAFT");
@@ -457,30 +476,32 @@ export default function MenuPage() {
             <h1 className="text-xl font-semibold">Menu</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">Items, categories, and AI-assisted menu setup.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadMenu.isPending}
-              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
-            >
-              {uploadMenu.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {uploadMenu.isPending ? "Extracting…" : "Upload Menu"}
-            </button>
-            <button
-              onClick={() => setShowAddItem((s) => !s)}
-              className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40"
-            >
-              <Plus className="h-4 w-4" /> Add Item
-            </button>
-          </div>
+          {canManage && (
+            <div className="flex items-center gap-2">
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadMenu.isPending}
+                className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+              >
+                {uploadMenu.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadMenu.isPending ? "Extracting…" : "Upload Menu"}
+              </button>
+              <button
+                onClick={() => setShowAddItem((s) => !s)}
+                className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40"
+              >
+                <Plus className="h-4 w-4" /> Add Item
+              </button>
+            </div>
+          )}
         </div>
 
         {uploadError && (
           <div className="card-surface p-4 text-sm text-red-500">{uploadError}</div>
         )}
 
-        {showAddItem && <AddItemForm categories={categoryOptions} onClose={() => setShowAddItem(false)} />}
+        {canManage && showAddItem && <AddItemForm categories={categoryOptions} onClose={() => setShowAddItem(false)} />}
 
         {overview && <MenuStatusCard overview={overview} />}
 
@@ -518,7 +539,7 @@ export default function MenuPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {draftItems.map((item) => (
-                    <DraftItemRow key={item.id} item={item} categories={categoryOptions} />
+                    <DraftItemRow key={item.id} item={item} categories={categoryOptions} canManage={canManage} />
                   ))}
                 </tbody>
               </table>
@@ -530,13 +551,13 @@ export default function MenuPage() {
         <div>
           <div className="mb-3 flex items-center justify-between">
             <SectionLabel>Categories</SectionLabel>
-            {!showAddCategory && (
+            {canManage && !showAddCategory && (
               <button onClick={() => setShowAddCategory(true)} className="flex items-center gap-1 text-xs font-medium text-accent hover:underline">
                 <Plus className="h-3 w-3" /> Add Category
               </button>
             )}
           </div>
-          {showAddCategory && <div className="mb-3"><AddCategoryForm onClose={() => setShowAddCategory(false)} /></div>}
+          {canManage && showAddCategory && <div className="mb-3"><AddCategoryForm onClose={() => setShowAddCategory(false)} /></div>}
           <div className="flex flex-wrap gap-2">
             {categoriesError ? (
               <ErrorBanner message="Failed to load categories. Try refreshing the page." />
@@ -546,9 +567,11 @@ export default function MenuPage() {
                   <div key={c.id} className="flex items-center gap-2 rounded-full border border-border bg-muted/20 px-3 py-1.5 text-sm">
                     <span>{c.name}</span>
                     <span className="text-xs text-muted-foreground">({c._count.items})</span>
-                    <button onClick={() => setConfirmDeleteCategory({ id: c.id, name: c.name, itemCount: c._count.items })} className="text-muted-foreground hover:text-red-500">
-                      <X className="h-3 w-3" />
-                    </button>
+                    {canManage && (
+                      <button onClick={() => setConfirmDeleteCategory({ id: c.id, name: c.name, itemCount: c._count.items })} className="text-muted-foreground hover:text-red-500">
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {(!categories || categories.length === 0) && (
@@ -597,16 +620,18 @@ export default function MenuPage() {
                                   <ChefHat className="h-3 w-3" /> Recipe
                                   <ChevronDown className={cn("h-3 w-3 transition-transform", recipeItemId === item.id && "rotate-180")} />
                                 </button>
-                                <button onClick={() => setConfirmDeleteItem({ id: item.id, name: item.name })} className="rounded border border-border p-1.5 text-muted-foreground hover:bg-muted/40">
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
+                                {canManage && (
+                                  <button onClick={() => setConfirmDeleteItem({ id: item.id, name: item.name })} className="rounded border border-border p-1.5 text-muted-foreground hover:bg-muted/40">
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
                           {recipeItemId === item.id && (
                             <tr>
                               <td colSpan={4} className="p-0">
-                                <RecipeEditor menuItem={item} onClose={requestCloseRecipe} onDirtyChange={setRecipeDirty} />
+                                <RecipeEditor menuItem={item} onClose={requestCloseRecipe} onDirtyChange={setRecipeDirty} canManage={canManage} />
                               </td>
                             </tr>
                           )}

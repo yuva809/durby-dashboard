@@ -10,6 +10,7 @@ import {
   useChangeTeamRole, useRemoveTeamMember, useLinkableEmployees, useLinkEmployeeAccount,
   type TeamRole,
 } from "@/hooks/use-team";
+import { useWorkforceDepartments, useWorkforceRoles } from "@/hooks/use-workforce";
 
 const CATEGORIES = [
   { icon: Bell, label: "Notifications" },
@@ -92,14 +93,47 @@ function TeamSection() {
   );
 }
 
+type WorkforceMode = "none" | "existing" | "new";
+
 function InviteForm({ onDone }: { onDone: () => void }) {
   const invite = useInviteTeamMember();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<TeamRole>("SERVICE");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Workforce assignment — entirely optional. Leaving mode "none" reproduces
+  // the exact prior invite payload (email + role only).
+  const [workforceMode, setWorkforceMode] = useState<WorkforceMode>("none");
+  const [existingEmployeeId, setExistingEmployeeId] = useState("");
+  const [newEmployeeName, setNewEmployeeName] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [workforceRole, setWorkforceRole] = useState("");
+
+  const { data: departments } = useWorkforceDepartments();
+  const { data: workforceRoles } = useWorkforceRoles();
+  const { data: linkableEmployees } = useLinkableEmployees();
+  const unlinkedEmployees = (linkableEmployees ?? []).filter((e) => !e.userId);
 
   function submit() {
     if (!email.trim()) return;
-    invite.mutate({ email: email.trim(), role }, { onSuccess: () => { setEmail(""); onDone(); } });
+    setErrorMessage(null);
+
+    const workforceAssignment =
+      workforceMode === "existing" && existingEmployeeId
+        ? { existingEmployeeId }
+        : workforceMode === "new" && newEmployeeName.trim() && workforceRole
+          ? { newEmployee: { name: newEmployeeName.trim(), departmentId: departmentId || null, workforceRole } }
+          : undefined;
+
+    invite.mutate(
+      { email: email.trim(), role, workforceAssignment },
+      {
+        onSuccess: () => { setEmail(""); onDone(); },
+        onError: (err) => {
+          setErrorMessage(err instanceof Error ? err.message : "Could not send the invitation — please try again.");
+        },
+      },
+    );
   }
 
   return (
@@ -120,7 +154,67 @@ function InviteForm({ onDone }: { onDone: () => void }) {
           {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
       </div>
-      {invite.isError && <p className="text-xs text-red-500">Could not send the invitation — please try again.</p>}
+
+      <div className="flex flex-col gap-2 rounded-md border border-border/60 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Workforce assignment <span className="font-normal normal-case">(optional)</span>
+        </p>
+        <div className="flex flex-wrap gap-3 text-xs">
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={workforceMode === "none"} onChange={() => setWorkforceMode("none")} />
+            None
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={workforceMode === "existing"} onChange={() => setWorkforceMode("existing")} />
+            Link existing employee
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={workforceMode === "new"} onChange={() => setWorkforceMode("new")} />
+            Create new employee
+          </label>
+        </div>
+
+        {workforceMode === "existing" && (
+          <select
+            value={existingEmployeeId}
+            onChange={(e) => setExistingEmployeeId(e.target.value)}
+            className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+          >
+            <option value="">Select an unlinked roster employee…</option>
+            {unlinkedEmployees.map((e) => <option key={e.id} value={e.id}>{e.name} ({e.role})</option>)}
+          </select>
+        )}
+
+        {workforceMode === "new" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={newEmployeeName}
+              onChange={(e) => setNewEmployeeName(e.target.value)}
+              placeholder="Employee name"
+              className="min-w-0 flex-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+            />
+            <select
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+            >
+              <option value="">Department (optional)</option>
+              {(departments ?? []).filter((d) => !d.archived).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <select
+              value={workforceRole}
+              onChange={(e) => setWorkforceRole(e.target.value)}
+              className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+            >
+              <option value="">Workforce role…</option>
+              {(workforceRoles ?? []).filter((r) => !r.archived).map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {errorMessage && <p className="text-xs text-red-500">{errorMessage}</p>}
       <div className="flex gap-2">
         <button
           onClick={submit}

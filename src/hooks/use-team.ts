@@ -31,6 +31,20 @@ export interface LinkableEmployee {
   userId: string | null;
 }
 
+// Optional workforce assignment carried on a team invite — either link an
+// existing unlinked Employee roster row, or create a brand-new one with a
+// department + WorkforceRole. Entirely separate from `role`/TeamRole above
+// (the auth/permission role) — this is the Employee's scheduling role
+// (Bartender, Chef, ...). See backend InvitationsService#create.
+export interface WorkforceAssignmentInput {
+  existingEmployeeId?: string;
+  newEmployee?: {
+    name: string;
+    departmentId?: string | null;
+    workforceRole: string;
+  };
+}
+
 function invalidateTeam(qc: ReturnType<typeof useQueryClient>, restaurantId: string | null) {
   qc.invalidateQueries({ queryKey: ["team-members", restaurantId] });
   qc.invalidateQueries({ queryKey: ["team-invitations", restaurantId] });
@@ -58,7 +72,7 @@ export function useInviteTeamMember() {
   const restaurantId = useRestaurantId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { email: string; role: TeamRole }) =>
+    mutationFn: (input: { email: string; role: TeamRole; workforceAssignment?: WorkforceAssignmentInput }) =>
       apiClient.post(`/restaurants/${restaurantId}/team/invitations`, input),
     onSuccess: () => invalidateTeam(qc, restaurantId),
   });
